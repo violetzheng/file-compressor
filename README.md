@@ -39,7 +39,7 @@ Open http://localhost:5000, upload a file to squash. Pick a target file size and
   - **PDF** — tries Ghostscript.  
   - If the file is already under the target size, it's returned untouched.
 
-The result is streamed back as `<name>-compressed.<ext>` with the original type preserved.
+Resulting compressed file is named `<name>-compressed.<ext>` and auto-downloaded.
 
 ## Notes
 - Upload cap is 100 MB (`MAX_CONTENT_LENGTH` in `app.py`).
