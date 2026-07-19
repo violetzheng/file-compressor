@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Squash — file compressor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F6F4FB;
+    --surface: #FFFFFF;
+    --ink: #211A38;
+    --muted: #776F92;
+    --violet: #6C3DF4;
+    --violet-deep: #5730CF;
+    --violet-soft: #EDE8FD;
+    --track: #E4DEF4;
+    --danger: #C43D5B;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 48px 20px;
+  }
+  main { width: 100%; max-width: 560px; }
+
+  header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 28px; }
+  .wordmark { font-weight: 600; font-size: 20px; letter-spacing: -0.02em; }
+  .wordmark::before {
+    content: "";
+    display: inline-block;
+    width: 10px; height: 10px;
+    background: var(--violet);
+    border-radius: 3px;
+    margin-right: 8px;
+    transform: translateY(-1px) scaleY(0.6); /* a squashed square */
+  }
+  header small { color: var(--muted); font-size: 13px; }
+
+  /* Drop zone */
+  #drop {
+    background: var(--surface);
+    border: 1.5px dashed var(--track);
+    border-radius: var(--radius);
+    padding: 44px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  #drop:hover, #drop.over { border-color: var(--violet); background: var(--violet-soft); }
+  #drop:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+  #drop p { font-size: 15px; }
+  #drop .hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  #file { display: none; }
+
+  /* Result card */
+  #card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-top: 16px;
+    border: 1px solid var(--track);
+    display: none;
+  }
+  #card.show { display: block; }
+  .filename {
+    font-size: 14px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .filemeta { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+
+  /* The gauge */
+  .gauge { margin-top: 26px; }
+  .gauge-labels {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: var(--muted); margin-bottom: 6px;
+  }
+  .gauge-labels .mono { color: var(--ink); }
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%; height: 10px;
+    border-radius: 5px;
+    background: linear-gradient(to right, var(--violet) 0%, var(--violet) var(--fill, 50%), var(--track) var(--fill, 50%));
+    cursor: ew-resize;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 3px solid var(--violet);
+    box-shadow: 0 1px 4px rgba(33,26,56,.2);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 3px solid var(--violet);
+  }
+  input[type="range"]:focus-visible { outline: 2px solid var(--violet-deep); outline-offset: 4px; }
+
+  .target-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 18px; font-size: 14px;
+  }
+  .target-row label { color: var(--muted); }
+  #targetKb {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 15px;
+    width: 110px;
+    padding: 8px 10px;
+    border: 1px solid var(--track);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  #targetKb:focus-visible { outline: 2px solid var(--violet); border-color: transparent; }
+  .savings { margin-left: auto; color: var(--violet-deep); font-size: 13px; }
+
+  button.primary {
+    margin-top: 20px;
+    width: 100%;
+    padding: 13px;
+    font: 500 15px "Space Grotesk", sans-serif;
+    color: #fff;
+    background: var(--violet);
+    border: none; border-radius: 10px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  button.primary:hover { background: var(--violet-deep); }
+  button.primary:disabled { background: var(--track); color: var(--muted); cursor: default; }
+  button.primary:focus-visible { outline: 2px solid var(--violet-deep); outline-offset: 2px; }
+
+  #status { margin-top: 14px; font-size: 13.5px; color: var(--muted); min-height: 18px; }
+  #status.error { color: var(--danger); }
+  #status a { color: var(--violet-deep); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="wordmark">Squash</span>
+    <small>compress images &amp; PDFs to an exact size</small>
+  </header>
+
+  <div id="drop" tabindex="0" role="button" aria-label="Choose a file to compress">
+    <p>Drop a file here, or click to choose</p>
+    <p class="hint">JPG · PNG · WebP · PDF, up to 100 MB</p>
+  </div>
+  <input type="file" id="file" accept=".jpg,.jpeg,.png,.webp,.pdf">
+
+  <section id="card" aria-live="polite">
+    <div class="filename" id="fname"></div>
+    <div class="filemeta" id="fmeta"></div>
+
+    <div class="gauge">
+      <div class="gauge-labels">
+        <span>smallest possible <span class="mono" id="minLabel"></span></span>
+        <span>original <span class="mono" id="maxLabel"></span></span>
+      </div>
+      <input type="range" id="slider" min="0" max="100" step="1"
+             aria-label="Target file size">
+    </div>
+
+    <div class="target-row">
+      <label for="targetKb">Compress to</label>
+      <input type="number" id="targetKb" min="1" step="1"> <span>KB</span>
+      <span class="savings" id="savings"></span>
+    </div>
+
+    <button class="primary" id="go">Compress &amp; download</button>
+    <div id="status"></div>
+  </section>
+</main>
+
+<script>
+  const drop = document.getElementById("drop");
+  const fileInput = document.getElementById("file");
+  const card = document.getElementById("card");
+  const slider = document.getElementById("slider");
+  const targetKb = document.getElementById("targetKb");
+  const goBtn = document.getElementById("go");
+  const statusEl = document.getElementById("status");
+
+  let currentFile = null;
+  let minSize = 0, maxSize = 0;
+
+  const fmt = (bytes) => {
+    if (bytes >= 1024 * 1024) return (bytes / 1048576).toFixed(2) + " MB";
+    return Math.max(1, Math.round(bytes / 1024)) + " KB";
+  };
+
+  const setStatus = (msg, isError = false) => {
+    statusEl.textContent = msg;
+    statusEl.classList.toggle("error", isError);
+  };
+
+  // --- picking a file -----------------------------------------------------
+  drop.addEventListener("click", () => fileInput.click());
+  drop.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
+  });
+  ["dragover", "dragenter"].forEach(ev =>
+    drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(ev =>
+    drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => {
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length) handleFile(fileInput.files[0]);
+  });
+
+  async function handleFile(file) {
+    currentFile = file;
+    card.classList.add("show");
+    document.getElementById("fname").textContent = file.name;
+    document.getElementById("fmeta").textContent = "analyzing…";
+    goBtn.disabled = true;
+    setStatus("");
+
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch("/api/analyze", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Analysis failed.");
+
+      minSize = data.min_size;
+      maxSize = data.original_size;
+      document.getElementById("fmeta").textContent =
+        data.file_type.toUpperCase() + " · " + fmt(maxSize) +
+        " · can shrink to about " + fmt(minSize);
+      document.getElementById("minLabel").textContent = fmt(minSize);
+      document.getElementById("maxLabel").textContent = fmt(maxSize);
+
+      slider.min = minSize;
+      slider.max = maxSize;
+      slider.value = Math.round(minSize + (maxSize - minSize) / 2);
+      syncFromSlider();
+      goBtn.disabled = false;
+    } catch (err) {
+      document.getElementById("fmeta").textContent = "";
+      setStatus(err.message, true);
+    }
+  }
+
+  // --- keeping slider + number input in step ------------------------------
+  function paintSlider() {
+    const pct = maxSize > minSize
+      ? ((slider.value - minSize) / (maxSize - minSize)) * 100 : 100;
+    slider.style.setProperty("--fill", pct + "%");
+    const saved = Math.round((1 - slider.value / maxSize) * 100);
+    document.getElementById("savings").textContent =
+      saved > 0 ? "−" + saved + "%" : "";
+  }
+  function syncFromSlider() {
+    targetKb.value = Math.max(1, Math.round(slider.value / 1024));
+    paintSlider();
+  }
+  function syncFromInput() {
+    let bytes = Math.round(Number(targetKb.value) * 1024);
+    if (!Number.isFinite(bytes)) return;
+    bytes = Math.min(Math.max(bytes, minSize), maxSize);
+    slider.value = bytes;
+    paintSlider();
+  }
+  slider.addEventListener("input", syncFromSlider);
+  targetKb.addEventListener("change", () => { syncFromInput(); syncFromSlider(); });
+
+  // --- compressing --------------------------------------------------------
+  goBtn.addEventListener("click", async () => {
+    if (!currentFile) return;
+    goBtn.disabled = true;
+    setStatus("Compressing…");
+
+    const form = new FormData();
+    form.append("file", currentFile);
+    form.append("target", slider.value);
+    try {
+      const res = await fetch("/api/compress", { method: "POST", body: form });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Compression failed.");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const dot = currentFile.name.lastIndexOf(".");
+      a.href = url;
+      a.download = currentFile.name.slice(0, dot) + "-compressed" + currentFile.name.slice(dot);
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus("Done — " + fmt(blob.size) + " downloaded.");
+    } catch (err) {
+      setStatus(err.message, true);
+    } finally {
+      goBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
