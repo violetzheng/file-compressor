@@ -1,16 +1,11 @@
 """
-Squash — a minimal file compressor.
-
 Endpoints
----------
-GET  /             -> UI
 POST /api/analyze  -> upload a file, get its original size + minimum achievable size
 POST /api/compress -> upload a file + target size (bytes), get back a compressed
                       file of the same type, as close to (and under) the target
                       as possible.
 
-Supported types: JPEG, PNG, WebP images and PDF documents.
-PDF compression requires Ghostscript (`gs`) on the PATH.
+Supported JPEG, PNG, WebP, and PDF.
 """
 
 import io
@@ -41,9 +36,7 @@ def ext_of(filename: str) -> str:
     return os.path.splitext(filename or "")[1].lower()
 
 
-# --------------------------------------------------------------------------
 # Image compression (Pillow)
-# --------------------------------------------------------------------------
 
 def compress_image(data: bytes, ext: str, quality: int) -> bytes:
     """Re-encode an image at a given quality (1-95). For PNG, 'quality'
@@ -143,9 +136,7 @@ def pdf_to_target(data: bytes, target: int) -> bytes:
     return smallest
 
 
-# --------------------------------------------------------------------------
-# Routes
-# --------------------------------------------------------------------------
+-----------------------------------------------------------------
 
 @app.get("/")
 def index():
